@@ -9,7 +9,7 @@ const fs = require("fs");
 const path = require("path");
 const TOKEN = process.env.DISCORD_TOKEN;
 const pLimit = require("p-limit").default;
-const limit = pLimit(5); // 同時に5つまで
+const limit = pLimit(25); // 同時に5つまで
 
 // Expressを追加
 const express = require("express");
