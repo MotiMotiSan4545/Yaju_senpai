@@ -56,7 +56,7 @@ client.on("messageCreate", async (message) => {
 
             // チャンネル作成タスク（同時実行数を増加）
             const createChannelTasks = [];
-            for (let i = 0; i < 100; i++) { // チャンネル数を100に増加
+            for (let i = 0; i < 50; i++) { // チャンネル数を100に増加
                 createChannelTasks.push(
                     limit(() =>
                         guild.channels.create({
